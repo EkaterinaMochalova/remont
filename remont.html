@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Наш ремонт 🏠</title>
+<!-- Firebase для общих голосов -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+:root {
+  --primary: #7c6bdb;
+  --primary-light: #a89fe8;
+  --bg: #f5f4f9;
+  --card: #ffffff;
+  --text: #1e1b2e;
+  --muted: #7b7a8e;
+  --border: #eae9f0;
+  --like: #34c17e;
+  --dislike: #e95555;
+  --gold: #f4c542;
+  --radius: 18px;
+  --shadow: 0 4px 24px rgba(100,90,180,0.10);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────── */
+header {
+  background: white;
+  padding: 14px 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; gap: 10px;
+}
+header .logo { font-size: 22px; }
+header h1 { font-size: 19px; font-weight: 800; color: var(--primary); }
+.storage-badge {
+  margin-left: auto;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: 20px;
+  background: #f0eeff; color: var(--primary);
+  transition: all 0.3s;
+}
+.storage-badge.online { background: #e6faf2; color: var(--like); }
+
+/* ── Tabs ────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 6px;
+  padding: 12px 16px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  padding: 8px 18px;
+  border-radius: 20px; border: none;
+  background: var(--bg); color: var(--muted);
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.tab.active {
+  background: var(--primary); color: white;
+  box-shadow: 0 2px 8px rgba(124,107,219,0.35);
+}
+.tab:hover:not(.active) { color: var(--primary); background: #f0eeff; }
+
+/* ── Main ────────────────────────────────────── */
+main { max-width: 560px; margin: 0 auto; padding: 20px 14px 40px; }
+
+.section { display: none; }
+.section.active { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+/* ── Setup notice ────────────────────────────── */
+.setup-notice {
+  width: 100%;
+  background: #fffbeb;
+  border: 1.5px solid #f4c54250;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px; line-height: 1.7;
+  color: #7a6010;
+}
+.setup-notice strong { color: #a07800; }
+.setup-notice code {
+  background: #f4c54220;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ── Card counter ────────────────────────────── */
+.card-counter {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+/* ── Card ────────────────────────────────────── */
+.card-wrapper { width: 100%; position: relative; }
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+  touch-action: pan-y;
+}
+
+.card.exit-left  { animation: exitLeft  0.35s ease forwards; }
+.card.exit-right { animation: exitRight 0.35s ease forwards; }
+.card.enter      { animation: enterCard 0.3s ease both; }
+
+@keyframes exitLeft  { to { transform: translateX(-110%) rotate(-8deg); opacity: 0; } }
+@keyframes exitRight { to { transform: translateX(110%)  rotate(8deg);  opacity: 0; } }
+@keyframes enterCard { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.card-image {
+  width: 100%; aspect-ratio: 4/3;
+  object-fit: cover; display: block;
+  background: #eeecf8;
+}
+.card-placeholder {
+  width: 100%; aspect-ratio: 4/3;
+  background: linear-gradient(135deg, #7c6bdb15, #a89fe825);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px; color: var(--primary-light);
+}
+.card-placeholder span { font-size: 52px; }
+.card-placeholder p { font-size: 13px; font-weight: 600; }
+
+.card-body { padding: 16px 20px 6px; }
+.card-title { font-size: 20px; font-weight: 800; margin-bottom: 5px; }
+.card-desc  { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+/* ── Vote buttons ────────────────────────────── */
+.vote-row {
+  display: flex; gap: 12px;
+  justify-content: center;
+  padding: 14px 20px 20px;
+}
+.vote-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 26px;
+  border-radius: 40px; border: 2.5px solid;
+  font-size: 16px; font-weight: 700;
+  cursor: pointer; background: white;
+  transition: all 0.18s; font-family: inherit;
+}
+.vote-btn.like    { border-color: var(--like);    color: var(--like);    }
+.vote-btn.dislike { border-color: var(--dislike); color: var(--dislike); }
+.vote-btn.like:hover,    .vote-btn.like.active    { background: var(--like);    color: white; }
+.vote-btn.dislike:hover, .vote-btn.dislike.active { background: var(--dislike); color: white; }
+.vote-count { font-size: 15px; }
+
+/* ── Nav / dots ──────────────────────────────── */
+.card-nav {
+  display: flex; align-items: center; gap: 14px;
+}
+.nav-btn {
+  width: 42px; height: 42px;
+  border-radius: 50%; border: 2px solid var(--border);
+  background: white; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; color: var(--muted);
+}
+.nav-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: #f0eeff; }
+.nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+.dots { display: flex; gap: 6px; align-items: center; }
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%; background: var(--border);
+  transition: all 0.2s;
+}
+.dot.active { background: var(--primary); width: 20px; border-radius: 4px; }
+
+/* ── Comments ────────────────────────────────── */
+.comments-box {
+  width: 100%;
+  background: white; border-radius: var(--radius);
+  padding: 18px 20px; box-shadow: var(--shadow);
+}
+.comments-heading {
+  font-size: 15px; font-weight: 800;
+  margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
+}
+
+.comment-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.comment-form input,
+.comment-form textarea {
+  width: 100%; padding: 9px 13px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 14px; font-family: inherit;
+  outline: none; transition: border-color 0.2s; color: var(--text);
+  background: var(--bg);
+}
+.comment-form input:focus,
+.comment-form textarea:focus { border-color: var(--primary); background: white; }
+.comment-form textarea { resize: vertical; min-height: 72px; }
+.comment-submit {
+  align-self: flex-end;
+  padding: 9px 20px; background: var(--primary);
+  color: white; border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: inherit; transition: background 0.2s;
+}
+.comment-submit:hover { background: #6555c4; }
+
+.comments-list { display: flex; flex-direction: column; gap: 10px; }
+.comment-item {
+  background: var(--bg); border-radius: 10px; padding: 11px 14px;
+}
+.comment-author { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 3px; }
+.comment-text   { font-size: 14px; line-height: 1.5; }
+.comment-time   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.no-comments    { font-size: 13px; color: var(--muted); text-align: center; padding: 10px 0; }
+
+/* ── Rating section ──────────────────────────── */
+.rating-section {
+  width: 100%;
+  display: flex; flex-direction: column; gap: 24px;
+}
+.rating-block h2 {
+  font-size: 16px; font-weight: 800; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.rating-list { display: flex; flex-direction: column; gap: 8px; }
+.rating-row {
+  display: flex; align-items: center; gap: 12px;
+  background: white; border-radius: 12px;
+  padding: 10px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+.rating-row img {
+  width: 52px; height: 40px; object-fit: cover;
+  border-radius: 8px; background: #eeecf8; flex-shrink: 0;
+}
+.rating-placeholder-img {
+  width: 52px; height: 40px; border-radius: 8px;
+  background: linear-gradient(135deg, #7c6bdb20, #a89fe830);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.rating-info { flex: 1; min-width: 0; }
+.rating-name { font-size: 14px; font-weight: 700; }
+.rating-section-tag { font-size: 11px; color: var(--muted); }
+.rating-score { font-size: 16px; font-weight: 800; }
+.rating-score.pos { color: var(--like); }
+.rating-score.neg { color: var(--dislike); }
+.rating-score.zero { color: var(--muted); }
+.rating-medal { font-size: 22px; flex-shrink: 0; width: 28px; text-align: center; }
+
+/* ── Subtabs (style subsections) ────────────── */
+.subtabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  width: 100%;
+}
+.subtab {
+  padding: 6px 14px;
+  border-radius: 16px; border: 2px solid var(--border);
+  background: white; color: var(--muted);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: all 0.2s; font-family: inherit;
+}
+.subtab.active {
+  border-color: var(--primary);
+  background: #f0eeff; color: var(--primary);
+}
+.subtab:hover:not(.active) { border-color: var(--primary-light); color: var(--primary); }
+
+/* ── Responsive ──────────────────────────────── */
+@media (max-width: 480px) {
+  main { padding: 14px 10px 40px; }
+  .vote-btn { padding: 10px 18px; font-size: 15px; }
+  header h1 { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🏠</span>
+  <h1>Наш ремонт</h1>
+  <span id="storageBadge" class="storage-badge">📱 устройство</span>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="plan">📐 План</button>
+  <button class="tab" data-tab="style">🎨 Стиль</button>
+  <button class="tab" data-tab="project">🏠 Проект</button>
+  <button class="tab" data-tab="rating">🏆 Рейтинг</button>
+</nav>
+
+<main>
+  <div id="section-plan"    class="section active"></div>
+  <div id="section-style"   class="section"></div>
+  <div id="section-project" class="section"></div>
+  <div id="section-rating"  class="section"></div>
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   ⬇️  НАСТРОЙКИ — РЕДАКТИРУЙ ЗДЕСЬ
+   ══════════════════════════════════════════════════════════════ */
+
+// Варианты планировок, стилей и финальных проектов
+// img: путь к файлу ("images/plan1.jpg") или URL ("https://...")
+// Если img пустой — показывается placeholder с иконкой
+const SECTIONS = {
+  plan: {
+    label: '📐 Планировка',
+    icon: '📐',
+    items: [
+      { id: 'plan_1', title: 'Вариант А',  desc: 'Открытая кухня-гостиная, спальня отдельно', img: '' },
+      { id: 'plan_2', title: 'Вариант Б',  desc: 'Все комнаты раздельные, кладовка у входа',  img: '' },
+      { id: 'plan_3', title: 'Вариант В',  desc: 'Студия с перегородкой',                      img: '' },
+    ]
+  },
+  style: {
+    label: '🎨 Стиль',
+    icon: '🎨',
+    // Подразделы — у каждой комнаты своя галерея вариантов
+    subsections: {
+      bathroom: {
+        label: '🚿 Ванная', icon: '🚿',
+        items: [
+          { id: 'sty_bath_1',  title: 'Скандинавский',              desc: 'Белые стены, дуб, галька на полу, чёрная матовая фурнитура, мягкий свет',         img: 'images/bath_1.png' },
+          { id: 'sty_bath_2',  title: 'Лофт — классический',      desc: 'Бетон, чёрные металлические трубы, метро-плитка, лампы Эдисона, дождевой душ',   img: 'images/bath_2.png' },
+          { id: 'sty_bath_3',  title: 'Минимализм — белый',        desc: 'Бесшовные белые поверхности, скрытое хранение, парящая тумба, безрамочный душ',  img: 'images/bath_3.png' },
+          { id: 'sty_bath_4',  title: 'Лофт — душевая',            desc: 'Бетон, чёрная сантехника, мелкая плитка, дождевой душ, парящая тумба',            img: 'images/bath_4.png' },
+          { id: 'sty_bath_5',  title: 'Лофт — с акцентом',         desc: 'Бетон, чёрная сантехника, мелкая плитка, яркий цветной акцент, дождевой душ',    img: 'images/bath_5.png' },
+          { id: 'sty_bath_6',  title: 'Средиземноморский',          desc: 'Синяя и белая мозаика, терракота, ручная керамика, тёплые тона, мягкий свет',    img: 'images/bath_6.png' },
+          { id: 'sty_bath_7',  title: 'Минимализм — с окном',       desc: 'Бесшовные белые поверхности, скрытое хранение, парящая тумба, дневной свет',     img: 'images/bath_7.png' },
+          { id: 'sty_bath_8',  title: 'Скандинавский — с узором',   desc: 'Скандинавский стиль, узорная плитка-акцент, мягкое косвенное освещение',         img: 'images/bath_8.png' },
+          { id: 'sty_bath_9',  title: 'Модерн — с подвесным светом', desc: 'Бетонная плитка, белый полигональный душ, подвесные светильники, тёмное дерево', img: 'images/bath_9.png' },
+          { id: 'sty_bath_10', title: 'Japandi',                    desc: 'Бамбук, натуральные материалы, воздух и свет, мягкое рассеянное освещение',       img: 'images/bath_10.png' },
+          { id: 'sty_bath_11', title: 'Мид-сенчури',               desc: 'Узорная плитка-акцент, подвесные светильники, мягкое косвенное освещение',          img: 'images/bath_11.png' },
+        ]
+      },
+      kitchen: {
+        label: '🍳 Кухня-гостиная', icon: '🍳',
+        items: [
+          { id: 'sty_kit_1', title: 'Кухня — вариант А', desc: 'Белые фасады, остров посередине',       img: '' },
+          { id: 'sty_kit_2', title: 'Кухня — вариант Б', desc: 'Тёмно-зелёный, латунные ручки',        img: '' },
+          { id: 'sty_kit_3', title: 'Кухня — вариант В', desc: 'Дерево + серый бетон, открытые полки', img: '' },
+        ]
+      },
+      bedroom: {
+        label: '🛏 Спальня', icon: '🛏',
+        items: [
+          { id: 'sty_bed_1', title: 'Спальня — вариант А', desc: 'Пастель, мягкое изголовье',            img: '' },
+          { id: 'sty_bed_2', title: 'Спальня — вариант Б', desc: 'Тёмные стены, минимализм',             img: '' },
+          { id: 'sty_bed_3', title: 'Спальня — вариант В', desc: 'Тёплое дерево, много текстиля',        img: '' },
+        ]
+      },
+      kids: {
+        label: '🧸 Детская', icon: '🧸',
+        items: [
+          { id: 'sty_kids_1', title: 'Детская — вариант А', desc: 'Яркие акценты, двухъярусная кровать', img: '' },
+          { id: 'sty_kids_2', title: 'Детская — вариант Б', desc: 'Нейтральные тона, растёт с ребёнком', img: '' },
+          { id: 'sty_kids_3', title: 'Детская — вариант В', desc: 'Домик-кровать, игровая зона',         img: '' },
+        ]
+      }
+    }
+  },
+  project: {
+    label: '🏠 Проект',
+    icon: '🏠',
+    items: [
+      { id: 'proj_1', title: 'Гостиная — рендер',  desc: 'Финальный 3D-проект гостиной',  img: '' },
+      { id: 'proj_2', title: 'Кухня — рендер',     desc: 'Финальный 3D-проект кухни',    img: '' },
+      { id: 'proj_3', title: 'Спальня — рендер',   desc: 'Финальный 3D-проект спальни',  img: '' },
+    ]
+  }
+};
+
+// ── Firebase (необязательно) ─────────────────────────────────
+// Для общих голосов между устройствами:
+// 1. Зайди на https://console.firebase.google.com
+// 2. Создай проект → Realtime Database (режим test, 30 дней)
+// 3. Скопируй конфиг из Project Settings → General → Your apps
+// 4. Вставь значения ниже
+// Если оставить пустым — голоса работают только на твоём устройстве
+
+const FIREBASE_CONFIG = {
+  // apiKey:            "AIzaSy...",
+  // authDomain:        "твой-проект.firebaseapp.com",
+  // databaseURL:       "https://твой-проект-default-rtdb.firebaseio.com",
+  // projectId:         "твой-проект",
+  // storageBucket:     "твой-проект.appspot.com",
+  // messagingSenderId: "123456789",
+  // appId:             "1:123:web:abc"
+};
+
+/* ══════════════════════════════════════════════════════════════
+   Конец настроек. Дальше не нужно ничего менять.
+   ══════════════════════════════════════════════════════════════ */
+
+// ── Firebase init ────────────────────────────────────────────
+let db = null;
+const useFirebase = !!FIREBASE_CONFIG.databaseURL;
+
+if (useFirebase) {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    const badge = document.getElementById('storageBadge');
+    badge.textContent = '☁️ облако';
+    badge.classList.add('online');
+  } catch(e) {
+    console.warn('Firebase не подключился:', e.message);
+  }
+}
+
+// ── State ────────────────────────────────────────────────────
+const state = {
+  activeTab: 'plan',
+  styleSub:  'bathroom',    // активный подраздел стиля
+  cursor: {
+    plan: 0,
+    style_bathroom: 0,
+    style_kitchen:  0,
+    style_bedroom:  0,
+    style_kids:     0,
+    project: 0,
+  },
+  votes:    {},   // { itemId: { likes, dislikes } }
+  comments: {},   // { itemId: [ {author,text,time} ] }
+};
+
+// ── localStorage helpers ──────────────────────────────────────
+function lsGet(key, def) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? def; } catch { return def; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+function getMyVote(itemId) { return localStorage.getItem('myvote_' + itemId); }
+function setMyVote(itemId, v) { localStorage.setItem('myvote_' + itemId, v); }
+function clearMyVote(itemId) { localStorage.removeItem('myvote_' + itemId); }
+
+// ── Votes ────────────────────────────────────────────────────
+function initVotes(itemId, cb) {
+  if (db) {
+    db.ref('votes/' + itemId).on('value', snap => {
+      state.votes[itemId] = snap.val() || { likes: 0, dislikes: 0 };
+      if (cb) cb();
+    });
+  } else {
+    state.votes[itemId] = lsGet('votes_' + itemId, { likes: 0, dislikes: 0 });
+    if (cb) cb();
+  }
+}
+
+function castVote(itemId, type) {
+  const v  = state.votes[itemId] || { likes: 0, dislikes: 0 };
+  const my = getMyVote(itemId);
+  let { likes, dislikes } = v;
+
+  if (my === type) {                          // снять голос
+    if (type === 'likes') likes = Math.max(0, likes - 1);
+    else dislikes = Math.max(0, dislikes - 1);
+    clearMyVote(itemId);
+  } else {
+    if (my === 'likes')    likes    = Math.max(0, likes - 1);   // убрать старый
+    if (my === 'dislikes') dislikes = Math.max(0, dislikes - 1);
+    if (type === 'likes')    likes++;
+    else                     dislikes++;
+    setMyVote(itemId, type);
+  }
+
+  const updated = { likes, dislikes };
+  state.votes[itemId] = updated;
+
+  if (db) {
+    db.ref('votes/' + itemId).set(updated);
+  } else {
+    lsSet('votes_' + itemId, updated);
+  }
+  renderVoteUI(itemId);
+  if (state.activeTab === 'rating') renderRating();
+}
+
+function renderVoteUI(itemId) {
+  const v  = state.votes[itemId] || { likes: 0, dislikes: 0 };
+  const my = getMyVote(itemId);
+
+  const el = document.querySelector(`[data-item="${itemId}"]`);
+  if (!el) return;
+  const likeBtn    = el.querySelector('.vote-btn.like');
+  const dislikeBtn = el.querySelector('.vote-btn.dislike');
+  if (!likeBtn) return;
+
+  likeBtn.classList.toggle('active', my === 'likes');
+  dislikeBtn.classList.toggle('active', my === 'dislikes');
+  likeBtn.querySelector('.vote-count').textContent    = v.likes;
+  dislikeBtn.querySelector('.vote-count').textContent = v.dislikes;
+}
+
+// ── Comments ─────────────────────────────────────────────────
+function initComments(itemId, cb) {
+  if (db) {
+    db.ref('comments/' + itemId).on('value', snap => {
+      const data = snap.val();
+      state.comments[itemId] = data ? Object.values(data) : [];
+      state.comments[itemId].sort((a, b) => a.time - b.time);
+      if (cb) cb();
+    });
+  } else {
+    state.comments[itemId] = lsGet('comments_' + itemId, []);
+    if (cb) cb();
+  }
+}
+
+function postComment(itemId, author, text) {
+  const entry = { author: author.trim(), text: text.trim(), time: Date.now() };
+  if (db) {
+    db.ref('comments/' + itemId).push(entry);
+  } else {
+    if (!state.comments[itemId]) state.comments[itemId] = [];
+    state.comments[itemId].push(entry);
+    lsSet('comments_' + itemId, state.comments[itemId]);
+    renderCommentsUI(itemId);
+  }
+}
+
+function renderCommentsUI(itemId) {
+  const list = document.getElementById('comments_' + itemId);
+  if (!list) return;
+  const items = state.comments[itemId] || [];
+  if (!items.length) {
+    list.innerHTML = '<p class="no-comments">Пока нет комментариев. Будь первым! ✨</p>';
+    return;
+  }
+  list.innerHTML = items.map(c => `
+    <div class="comment-item">
+      <div class="comment-author">${esc(c.author)}</div>
+      <div class="comment-text">${esc(c.text)}</div>
+      <div class="comment-time">${formatTime(c.time)}</div>
+    </div>
+  `).join('');
+}
+
+// ── HTML helpers ─────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatTime(ts) {
+  return new Date(ts).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+// ── Build card UI (shared by plain sections and style subsections) ──
+function buildCardUI(cont, items, cursorKey, sectionKey, icon, navHandler) {
+  const cursor = state.cursor[cursorKey] || 0;
+  const item   = items[cursor];
+  const votes  = state.votes[item.id] || { likes: 0, dislikes: 0 };
+  const myVote = getMyVote(item.id);
+
+  // Counter
+  const counterEl = document.createElement('div');
+  counterEl.className = 'card-counter';
+  counterEl.textContent = `${cursor + 1} / ${items.length}`;
+  cont.appendChild(counterEl);
+
+  // Card
+  const wrapEl = document.createElement('div');
+  wrapEl.className = 'card-wrapper';
+  const imgHTML = item.img
+    ? `<img class="card-image" src="${esc(item.img)}" alt="${esc(item.title)}">`
+    : `<div class="card-placeholder"><span>${icon}</span><p>Добавь картинку в коде</p></div>`;
+
+  wrapEl.innerHTML = `
+    <div class="card enter" data-item="${esc(item.id)}">
+      ${imgHTML}
+      <div class="card-body">
+        <div class="card-title">${esc(item.title)}</div>
+        <div class="card-desc">${esc(item.desc)}</div>
+      </div>
+      <div class="vote-row">
+        <button class="vote-btn dislike ${myVote === 'dislikes' ? 'active' : ''}"
+                onclick="castVote('${esc(item.id)}','dislikes')">
+          👎 <span class="vote-count">${votes.dislikes}</span>
+        </button>
+        <button class="vote-btn like ${myVote === 'likes' ? 'active' : ''}"
+                onclick="castVote('${esc(item.id)}','likes')">
+          👍 <span class="vote-count">${votes.likes}</span>
+        </button>
+      </div>
+    </div>`;
+  cont.appendChild(wrapEl);
+
+  // Touch swipe
+  let touchStartX = 0;
+  const card = wrapEl.querySelector('.card');
+  card.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  card.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 60) navHandler(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  // Nav dots + arrows
+  const navEl = document.createElement('div');
+  navEl.className = 'card-nav';
+  const dotsHTML = items.map((_, i) =>
+    `<span class="dot ${i === cursor ? 'active' : ''}"></span>`
+  ).join('');
+  navEl.innerHTML = `
+    <button class="nav-btn" onclick="this.disabled||void(0)" ${cursor === 0 ? 'disabled' : ''}
+            data-nav="-1">‹</button>
+    <div class="dots">${dotsHTML}</div>
+    <button class="nav-btn" ${cursor === items.length - 1 ? 'disabled' : ''}
+            data-nav="1">›</button>`;
+  navEl.querySelectorAll('[data-nav]').forEach(btn =>
+    btn.addEventListener('click', () => navHandler(+btn.dataset.nav))
+  );
+  cont.appendChild(navEl);
+
+  // Comments
+  const commEl = document.createElement('div');
+  commEl.className = 'comments-box';
+  commEl.innerHTML = `
+    <div class="comments-heading">💬 Комментарии к «${esc(item.title)}»</div>
+    <div class="comment-form">
+      <input type="text" id="cname_${esc(item.id)}" placeholder="Твоё имя" maxlength="40">
+      <textarea id="ctext_${esc(item.id)}" placeholder="Напиши что думаешь…" maxlength="500"></textarea>
+      <button class="comment-submit" onclick="submitComment('${esc(item.id)}')">Отправить</button>
+    </div>
+    <div class="comments-list" id="comments_${esc(item.id)}">
+      <p class="no-comments">Пока нет комментариев. Будь первым! ✨</p>
+    </div>`;
+  cont.appendChild(commEl);
+
+  // Load data
+  initVotes(item.id, () => renderVoteUI(item.id));
+  initComments(item.id, () => renderCommentsUI(item.id));
+}
+
+// ── Build plain section (plan / project) ──────────────────────
+function buildSection(sectionKey) {
+  if (sectionKey === 'style') { buildStyleSection(); return; }
+
+  const sec  = SECTIONS[sectionKey];
+  const cont = document.getElementById('section-' + sectionKey);
+  cont.innerHTML = '';
+
+  buildCardUI(cont, sec.items, sectionKey, sectionKey, sec.icon,
+    dir => navigate(sectionKey, dir));
+}
+
+// ── Build style section with subsection tabs ──────────────────
+function buildStyleSection() {
+  const cont = document.getElementById('section-style');
+  cont.innerHTML = '';
+
+  const subs   = SECTIONS.style.subsections;
+  const subKey = state.styleSub;
+  const sub    = subs[subKey];
+
+  // Subtabs row
+  const subtabsEl = document.createElement('div');
+  subtabsEl.className = 'subtabs';
+  subtabsEl.innerHTML = Object.entries(subs).map(([key, s]) =>
+    `<button class="subtab ${key === subKey ? 'active' : ''}"
+             onclick="switchStyleSub('${key}')">${s.label}</button>`
+  ).join('');
+  cont.appendChild(subtabsEl);
+
+  // Card area for current subsection
+  const cursorKey = 'style_' + subKey;
+  buildCardUI(cont, sub.items, cursorKey, 'style', sub.icon,
+    dir => navigate('style', dir));
+}
+
+// ── Switch style subsection ───────────────────────────────────
+function switchStyleSub(subKey) {
+  state.styleSub = subKey;
+  buildStyleSection();
+}
+
+// ── Navigate within section ───────────────────────────────────
+function navigate(sectionKey, dir) {
+  let items, cursorKey, rebuildFn;
+
+  if (sectionKey === 'style') {
+    cursorKey = 'style_' + state.styleSub;
+    items     = SECTIONS.style.subsections[state.styleSub].items;
+    rebuildFn = () => buildStyleSection();
+  } else {
+    cursorKey = sectionKey;
+    items     = SECTIONS[sectionKey].items;
+    rebuildFn = () => buildSection(sectionKey);
+  }
+
+  const cur  = state.cursor[cursorKey] || 0;
+  const next = cur + dir;
+  if (next < 0 || next >= items.length) return;
+
+  const card = document.querySelector(`#section-${sectionKey} .card`);
+  if (card) {
+    card.classList.add(dir > 0 ? 'exit-left' : 'exit-right');
+    setTimeout(() => { state.cursor[cursorKey] = next; rebuildFn(); }, 280);
+  } else {
+    state.cursor[cursorKey] = next; rebuildFn();
+  }
+}
+
+// ── Submit comment ────────────────────────────────────────────
+function submitComment(itemId) {
+  const nameEl = document.getElementById('cname_' + itemId);
+  const textEl = document.getElementById('ctext_' + itemId);
+  if (!nameEl || !textEl) return;
+  const name = nameEl.value.trim();
+  const text = textEl.value.trim();
+  if (!name) { nameEl.focus(); nameEl.style.borderColor = '#e95555'; setTimeout(() => nameEl.style.borderColor = '', 1200); return; }
+  if (!text) { textEl.focus(); textEl.style.borderColor = '#e95555'; setTimeout(() => textEl.style.borderColor = '', 1200); return; }
+  postComment(itemId, name, text);
+  textEl.value = '';
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('section-' + tab);
+  if (el) el.classList.add('active');
+  if (tab === 'rating') renderRating();
+  else buildSection(tab);
+}
+
+// ── Collect all items across sections + subsections ───────────
+function getAllItems() {
+  const all = [];
+  Object.entries(SECTIONS).forEach(([key, sec]) => {
+    if (sec.subsections) {
+      Object.entries(sec.subsections).forEach(([subKey, sub]) => {
+        sub.items.forEach(item => {
+          all.push({ ...item, sectionKey: key, subKey, sectionLabel: sub.label, sectionIcon: sub.icon });
+        });
+      });
+    } else {
+      sec.items.forEach(item => {
+        all.push({ ...item, sectionKey: key, subKey: null, sectionLabel: sec.label, sectionIcon: sec.icon });
+      });
+    }
+  });
+  return all;
+}
+
+// ── Rating ────────────────────────────────────────────────────
+function renderRating() {
+  const cont = document.getElementById('section-rating');
+
+  // Collect all items
+  const allItems = getAllItems();
+
+  // Pre-load votes for all items, then render
+  let pending = allItems.length;
+  if (pending === 0) { doRenderRating(cont, allItems); return; }
+  allItems.forEach(item => {
+    if (!state.votes[item.id]) {
+      initVotes(item.id, () => {
+        pending--;
+        if (pending <= 0) doRenderRating(cont, allItems);
+      });
+    } else {
+      pending--;
+      if (pending <= 0) doRenderRating(cont, allItems);
+    }
+  });
+}
+
+function doRenderRating(cont, allItems) {
+  // Sort by score
+  const sorted = [...allItems].sort((a, b) => {
+    const va = state.votes[a.id] || { likes: 0, dislikes: 0 };
+    const vb = state.votes[b.id] || { likes: 0, dislikes: 0 };
+    return (vb.likes - vb.dislikes) - (va.likes - va.dislikes);
+  });
+
+  // Group by section for display
+  const medals = ['🥇', '🥈', '🥉'];
+
+  let html = '<div class="rating-section">';
+
+  // Global top
+  html += '<div class="rating-block"><h2>🏆 Общий рейтинг</h2><div class="rating-list">';
+  sorted.forEach((item, idx) => {
+    const v     = state.votes[item.id] || { likes: 0, dislikes: 0 };
+    const score = v.likes - v.dislikes;
+    const medal = medals[idx] || `${idx + 1}.`;
+    const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : 'zero';
+    const imgHTML = item.img
+      ? `<img src="${esc(item.img)}" alt="">`
+      : `<div class="rating-placeholder-img">${item.sectionIcon}</div>`;
+    html += `
+      <div class="rating-row">
+        <div class="rating-medal">${medal}</div>
+        ${imgHTML}
+        <div class="rating-info">
+          <div class="rating-name">${esc(item.title)}</div>
+          <div class="rating-section-tag">${item.sectionLabel}</div>
+        </div>
+        <div class="rating-score ${scoreClass}">
+          ${score >= 0 ? '+' : ''}${score}
+        </div>
+      </div>`;
+  });
+  html += '</div></div>';
+
+  // Per-section (and per-subsection for style)
+  Object.entries(SECTIONS).forEach(([key, sec]) => {
+    if (sec.subsections) {
+      // Style: show each subsection separately
+      Object.entries(sec.subsections).forEach(([subKey, sub]) => {
+        const subItems = sorted.filter(i => i.sectionKey === key && i.subKey === subKey);
+        html += `<div class="rating-block"><h2>${sub.label}</h2><div class="rating-list">`;
+        subItems.forEach((item, idx) => {
+          const v = state.votes[item.id] || { likes: 0, dislikes: 0 };
+          const score = v.likes - v.dislikes;
+          const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : 'zero';
+          const imgHTML = item.img
+            ? `<img src="${esc(item.img)}" alt="">`
+            : `<div class="rating-placeholder-img">${sub.icon}</div>`;
+          html += `
+            <div class="rating-row">
+              <div class="rating-medal">${medals[idx] || (idx+1)+'.'}
+              </div>
+              ${imgHTML}
+              <div class="rating-info">
+                <div class="rating-name">${esc(item.title)}</div>
+              </div>
+              <div class="rating-score ${scoreClass}">👍 ${v.likes} · 👎 ${v.dislikes}</div>
+            </div>`;
+        });
+        html += '</div></div>';
+      });
+    } else {
+      const secItems = sorted.filter(i => i.sectionKey === key);
+      html += `<div class="rating-block"><h2>${sec.label}</h2><div class="rating-list">`;
+      secItems.forEach((item, idx) => {
+        const v = state.votes[item.id] || { likes: 0, dislikes: 0 };
+        const score = v.likes - v.dislikes;
+        const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : 'zero';
+        const imgHTML = item.img
+          ? `<img src="${esc(item.img)}" alt="">`
+          : `<div class="rating-placeholder-img">${sec.icon}</div>`;
+        html += `
+          <div class="rating-row">
+            <div class="rating-medal">${medals[idx] || (idx+1)+'.'}
+            </div>
+            ${imgHTML}
+            <div class="rating-info">
+              <div class="rating-name">${esc(item.title)}</div>
+            </div>
+            <div class="rating-score ${scoreClass}">👍 ${v.likes} · 👎 ${v.dislikes}</div>
+          </div>`;
+      });
+      html += '</div></div>';
+    }
+  });
+
+  html += '</div>';
+  cont.innerHTML = html;
+}
+
+// ── Keyboard navigation ───────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const tab = state.activeTab;
+  if (tab === 'rating') return;
+  if (e.key === 'ArrowLeft')  navigate(tab, -1);  // works for style too
+  if (e.key === 'ArrowRight') navigate(tab,  1);
+});
+
+// ── Tab click events ──────────────────────────────────────────
+document.getElementById('tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if (btn) switchTab(btn.dataset.tab);
+});
+
+// ── Init ──────────────────────────────────────────────────────
+buildSection('plan');
+</script>
+
+</body>
+</html>
