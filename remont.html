@@ -138,9 +138,30 @@ main { max-width: 560px; margin: 0 auto; padding: 20px 14px 40px; }
 .card-placeholder span { font-size: 52px; }
 .card-placeholder p { font-size: 13px; font-weight: 600; }
 
-.card-body { padding: 16px 20px 6px; }
+.card-body { padding: 16px 20px 6px; position: relative; }
 .card-title { font-size: 20px; font-weight: 800; margin-bottom: 5px; }
 .card-desc  { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+/* ── Edit mode ───────────────────────────────── */
+.edit-btn {
+  position: absolute; top: 12px; right: 16px;
+  background: rgba(124,107,219,0.10); border: none; border-radius: 50%;
+  width: 30px; height: 30px; cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.2s;
+}
+.card-body:hover .edit-btn { opacity: 1; }
+.card-edit-form { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 8px; }
+.card-edit-form input,
+.card-edit-form textarea {
+  width: 100%; box-sizing: border-box;
+  border: 1.5px solid var(--primary); border-radius: 8px;
+  padding: 7px 10px; font-size: 14px; font-family: inherit; outline: none;
+}
+.card-edit-form textarea { min-height: 72px; resize: vertical; }
+.edit-actions { display: flex; gap: 8px; }
+.edit-save-btn   { flex:1; padding:8px; border:none; border-radius:8px; background:var(--primary); color:#fff; font-weight:700; cursor:pointer; font-size:13px; }
+.edit-cancel-btn { flex:1; padding:8px; border:none; border-radius:8px; background:#eee; color:#555; font-weight:600; cursor:pointer; font-size:13px; }
 
 /* ── Vote buttons ────────────────────────────── */
 .vote-row {
@@ -371,9 +392,14 @@ const SECTIONS = {
       bedroom: {
         label: '🛏 Спальня', icon: '🛏',
         items: [
-          { id: 'sty_bed_1', title: 'Спальня — вариант А', desc: 'Пастель, мягкое изголовье',            img: '' },
-          { id: 'sty_bed_2', title: 'Спальня — вариант Б', desc: 'Тёмные стены, минимализм',             img: '' },
-          { id: 'sty_bed_3', title: 'Спальня — вариант В', desc: 'Тёплое дерево, много текстиля',        img: '' },
+          { id: 'sty_bed_1', title: 'Japandi',                desc: 'Низкая платформенная кровать, натуральное дерево, кремовый текстиль, бумажный абажур и живое растение у большого окна',  img: 'images/bed1.png' },
+          { id: 'sty_bed_2', title: 'Современный минимализм', desc: 'Встроенный шкаф заподлицо со стеной, парящая кровать, монохромная палитра белого и серого, скрытая подсветка',          img: 'images/bed2.png' },
+          { id: 'sty_bed_3', title: 'Тёмная роскошь',         desc: 'Тёмно-серые стены, бархатное изголовье, золотые акценты, драматичные подвесные светильники и тяжёлые шторы',           img: 'images/bed3.png' },
+          { id: 'sty_bed_4', title: 'Арт-деко',               desc: 'Геометрическое изголовье, латунь и чёрный цвет, орнаментальные обои, зеркальный шкаф и роскошный многослойный текстиль', img: 'images/bed4.png' },
+          { id: 'sty_bed_5', title: 'Лофт / Индастриал',      desc: 'Кирпичная стена, бетонный потолок, металлическая кровать, лампы Эдисона и окно в чёрной стальной раме',                img: 'images/bed5.png' },
+          { id: 'sty_bed_6', title: 'Коттедж',               desc: 'Деревянные балки на потолке, цветочные обои, латунные прикроватные лампы, лоскутное одеяло, встроенные полки и вид на сад', img: 'images/bed6.png' },
+          { id: 'sty_bed_7', title: 'Хэмптонс / Прибрежный', desc: 'Белые деревянные стены, тёмно-синие акценты, льняное бельё, декор из дрейфующего дерева и плетёный ковёр из морской травы', img: 'images/bed7.png' },
+          { id: 'sty_bed_8', title: 'Нордик Дарк',           desc: 'Тёмно-зелёные стены, мебель из берёзы, слои шерсти и овчины, латунная фурнитура, уютный уголок для чтения и северный свет',  img: 'images/bed8.png' },
         ]
       },
       kids: {
@@ -454,6 +480,7 @@ const state = {
   },
   votes:    {},   // { itemId: { likes, dislikes } }
   comments: {},   // { itemId: [ {author,text,time} ] }
+  edits:    {},   // { itemId: { title, desc } }
 };
 
 // ── localStorage helpers ──────────────────────────────────────
@@ -584,6 +611,82 @@ function renderCommentsUI(itemId) {
   `).join('');
 }
 
+// ── Edits ─────────────────────────────────────────────────────
+function initEdit(itemId, cb) {
+  if (useFirebase) {
+    fbGet('edits/' + itemId)
+      .then(data => { if (data) state.edits[itemId] = data; if (cb) cb(); })
+      .catch(() => {
+        const d = lsGet('edit_' + itemId, null);
+        if (d) state.edits[itemId] = d;
+        if (cb) cb();
+      });
+  } else {
+    const d = lsGet('edit_' + itemId, null);
+    if (d) state.edits[itemId] = d;
+    if (cb) cb();
+  }
+}
+
+function editItem(itemId) {
+  const el = document.querySelector(`[data-item="${itemId}"] .card-body`);
+  if (!el) return;
+  const cur = state.edits[itemId] || {};
+  const titleEl = el.querySelector('.card-title');
+  const descEl  = el.querySelector('.card-desc');
+  const origTitle = titleEl ? titleEl.textContent : '';
+  const origDesc  = descEl  ? descEl.textContent  : '';
+  el.querySelector('.edit-btn').style.display = 'none';
+  titleEl && (titleEl.style.display = 'none');
+  descEl  && (descEl.style.display  = 'none');
+  const form = document.createElement('div');
+  form.className = 'card-edit-form';
+  form.innerHTML = `
+    <input  id="etitle_${esc(itemId)}" value="${esc(cur.title || origTitle)}" maxlength="80">
+    <textarea id="edesc_${esc(itemId)}" maxlength="300">${esc(cur.desc || origDesc)}</textarea>
+    <div class="edit-actions">
+      <button class="edit-cancel-btn" onclick="cancelEdit('${esc(itemId)}')">Отмена</button>
+      <button class="edit-save-btn"   onclick="saveEdit('${esc(itemId)}')">Сохранить</button>
+    </div>`;
+  el.appendChild(form);
+}
+
+function cancelEdit(itemId) {
+  const el = document.querySelector(`[data-item="${itemId}"] .card-body`);
+  if (!el) return;
+  el.querySelector('.card-edit-form')?.remove();
+  el.querySelector('.card-title') && (el.querySelector('.card-title').style.display = '');
+  el.querySelector('.card-desc')  && (el.querySelector('.card-desc').style.display  = '');
+  el.querySelector('.edit-btn') && (el.querySelector('.edit-btn').style.display = '');
+}
+
+function saveEdit(itemId) {
+  const titleVal = document.getElementById('etitle_' + itemId)?.value.trim();
+  const descVal  = document.getElementById('edesc_'  + itemId)?.value.trim();
+  if (!titleVal) return;
+  const data = { title: titleVal, desc: descVal };
+  state.edits[itemId] = data;
+  if (useFirebase) {
+    fbSet('edits/' + itemId, data).catch(() => lsSet('edit_' + itemId, data));
+  } else {
+    lsSet('edit_' + itemId, data);
+  }
+  // Обновить отображение
+  const el = document.querySelector(`[data-item="${itemId}"] .card-body`);
+  if (el) {
+    el.querySelector('.card-edit-form')?.remove();
+    const t = el.querySelector('.card-title');
+    const d = el.querySelector('.card-desc');
+    if (t) { t.textContent = titleVal; t.style.display = ''; }
+    if (d) { d.textContent = descVal;  d.style.display = ''; }
+    const eb = el.querySelector('.edit-btn');
+    if (eb) eb.style.display = '';
+  }
+  // Обновить заголовок комментариев
+  const ch = document.querySelector('.comments-heading');
+  if (ch) ch.textContent = `💬 Комментарии к «${titleVal}»`;
+}
+
 // ── HTML helpers ─────────────────────────────────────────────
 function esc(s) {
   return String(s)
@@ -600,10 +703,13 @@ function formatTime(ts) {
 
 // ── Build card UI (shared by plain sections and style subsections) ──
 function buildCardUI(cont, items, cursorKey, sectionKey, icon, navHandler) {
-  const cursor = state.cursor[cursorKey] || 0;
-  const item   = items[cursor];
-  const votes  = state.votes[item.id] || { likes: 0, dislikes: 0 };
-  const myVote = getMyVote(item.id);
+  const cursor  = state.cursor[cursorKey] || 0;
+  const item    = items[cursor];
+  const votes   = state.votes[item.id] || { likes: 0, dislikes: 0 };
+  const myVote  = getMyVote(item.id);
+  const edited  = state.edits[item.id] || {};
+  const displayTitle = edited.title || item.title;
+  const displayDesc  = edited.desc  !== undefined ? edited.desc : item.desc;
 
   // Counter
   const counterEl = document.createElement('div');
@@ -622,8 +728,9 @@ function buildCardUI(cont, items, cursorKey, sectionKey, icon, navHandler) {
     <div class="card enter" data-item="${esc(item.id)}">
       ${imgHTML}
       <div class="card-body">
-        <div class="card-title">${esc(item.title)}</div>
-        <div class="card-desc">${esc(item.desc)}</div>
+        <button class="edit-btn" onclick="editItem('${esc(item.id)}')" title="Редактировать">✏️</button>
+        <div class="card-title">${esc(displayTitle)}</div>
+        <div class="card-desc">${esc(displayDesc)}</div>
       </div>
       <div class="vote-row">
         <button class="vote-btn dislike ${myVote === 'dislikes' ? 'active' : ''}"
@@ -682,6 +789,16 @@ function buildCardUI(cont, items, cursorKey, sectionKey, icon, navHandler) {
   // Load data
   initVotes(item.id, () => renderVoteUI(item.id));
   initComments(item.id, () => renderCommentsUI(item.id));
+  initEdit(item.id, () => {
+    const e = state.edits[item.id];
+    if (!e) return;
+    const el = document.querySelector(`[data-item="${item.id}"] .card-body`);
+    if (!el) return;
+    const t = el.querySelector('.card-title');
+    const d = el.querySelector('.card-desc');
+    if (t && e.title) t.textContent = e.title;
+    if (d && e.desc  !== undefined) d.textContent = e.desc;
+  });
 }
 
 // ── Build plain section (plan / project) ──────────────────────
