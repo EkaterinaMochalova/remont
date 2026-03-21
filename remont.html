@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Наш ремонт 🏠</title>
-<!-- Firebase для общих голосов -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 :root {
   --primary: #7c6bdb;
@@ -400,55 +397,48 @@ const SECTIONS = {
   }
 };
 
-// ── Firebase (необязательно) ─────────────────────────────────
-// Для общих голосов между устройствами:
-// 1. Зайди на https://console.firebase.google.com
-// 2. Создай проект → Realtime Database (режим test, 30 дней)
-// 3. Скопируй конфиг из Project Settings → General → Your apps
-// 4. Вставь значения ниже
-// Если оставить пустым — голоса работают только на твоём устройстве
+// ── Firebase REST API (без SDK) ──────────────────────────────
+const FB_DB = 'https://remont-67c51-default-rtdb.firebaseio.com';
+let useFirebase = true;
 
-const FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyDZ3XuCQnFhUhP92sf08ZM5v4M2lFCRZFM",
-  authDomain:        "remont-67c51.firebaseapp.com",
-  databaseURL:       "https://remont-67c51-default-rtdb.firebaseio.com",
-  projectId:         "remont-67c51",
-  storageBucket:     "remont-67c51.firebasestorage.app",
-  messagingSenderId: "827767296039",
-  appId:             "1:827767296039:web:5fda200cb4a10d3021fe02",
-};
+function fbBadge(ok) {
+  const badge = document.getElementById('storageBadge');
+  if (!badge) return;
+  if (ok) {
+    badge.textContent = '☁️ облако';
+    badge.classList.add('online');
+    badge.classList.remove('offline');
+  } else {
+    badge.textContent = '💾 локально';
+    badge.classList.remove('online', 'offline');
+  }
+}
+
+async function fbGet(path) {
+  const r = await fetch(`${FB_DB}/${path}.json`);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function fbSet(path, value) {
+  const r = await fetch(`${FB_DB}/${path}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if (!r.ok) throw new Error(r.status);
+}
+async function fbPush(path, value) {
+  const r = await fetch(`${FB_DB}/${path}.json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if (!r.ok) throw new Error(r.status);
+}
 
 /* ══════════════════════════════════════════════════════════════
    Конец настроек. Дальше не нужно ничего менять.
    ══════════════════════════════════════════════════════════════ */
-
-// ── Firebase init ────────────────────────────────────────────
-let db = null;
-const useFirebase = !!FIREBASE_CONFIG.databaseURL;
-
-if (useFirebase) {
-  try {
-    firebase.initializeApp(FIREBASE_CONFIG);
-    db = firebase.database();
-    // Проверяем реальное соединение
-    db.ref('.info/connected').on('value', snap => {
-      const badge = document.getElementById('storageBadge');
-      if (snap.val() === true) {
-        badge.textContent = '☁️ облако';
-        badge.classList.add('online');
-        badge.classList.remove('offline');
-      } else {
-        badge.textContent = '⚠️ нет связи';
-        badge.classList.add('offline');
-        badge.classList.remove('online');
-      }
-    });
-  } catch(e) {
-    console.error('Firebase ошибка:', e);
-    const badge = document.getElementById('storageBadge');
-    badge.textContent = '⚠️ ' + e.message;
-  }
-}
 
 // ── State ────────────────────────────────────────────────────
 const state = {
@@ -480,11 +470,19 @@ function clearMyVote(itemId) { localStorage.removeItem('myvote_' + itemId); }
 
 // ── Votes ────────────────────────────────────────────────────
 function initVotes(itemId, cb) {
-  if (db) {
-    db.ref('votes/' + itemId).on('value', snap => {
-      state.votes[itemId] = snap.val() || { likes: 0, dislikes: 0 };
-      if (cb) cb();
-    });
+  if (useFirebase) {
+    fbGet('votes/' + itemId)
+      .then(data => {
+        state.votes[itemId] = data || { likes: 0, dislikes: 0 };
+        fbBadge(true);
+        if (cb) cb();
+      })
+      .catch(() => {
+        useFirebase = false;
+        fbBadge(false);
+        state.votes[itemId] = lsGet('votes_' + itemId, { likes: 0, dislikes: 0 });
+        if (cb) cb();
+      });
   } else {
     state.votes[itemId] = lsGet('votes_' + itemId, { likes: 0, dislikes: 0 });
     if (cb) cb();
@@ -511,8 +509,8 @@ function castVote(itemId, type) {
   const updated = { likes, dislikes };
   state.votes[itemId] = updated;
 
-  if (db) {
-    db.ref('votes/' + itemId).set(updated);
+  if (useFirebase) {
+    fbSet('votes/' + itemId, updated).catch(() => lsSet('votes_' + itemId, updated));
   } else {
     lsSet('votes_' + itemId, updated);
   }
@@ -538,13 +536,17 @@ function renderVoteUI(itemId) {
 
 // ── Comments ─────────────────────────────────────────────────
 function initComments(itemId, cb) {
-  if (db) {
-    db.ref('comments/' + itemId).on('value', snap => {
-      const data = snap.val();
-      state.comments[itemId] = data ? Object.values(data) : [];
-      state.comments[itemId].sort((a, b) => a.time - b.time);
-      if (cb) cb();
-    });
+  if (useFirebase) {
+    fbGet('comments/' + itemId)
+      .then(data => {
+        state.comments[itemId] = data ? Object.values(data) : [];
+        state.comments[itemId].sort((a, b) => a.time - b.time);
+        if (cb) cb();
+      })
+      .catch(() => {
+        state.comments[itemId] = lsGet('comments_' + itemId, []);
+        if (cb) cb();
+      });
   } else {
     state.comments[itemId] = lsGet('comments_' + itemId, []);
     if (cb) cb();
@@ -553,13 +555,15 @@ function initComments(itemId, cb) {
 
 function postComment(itemId, author, text) {
   const entry = { author: author.trim(), text: text.trim(), time: Date.now() };
-  if (db) {
-    db.ref('comments/' + itemId).push(entry);
+  if (!state.comments[itemId]) state.comments[itemId] = [];
+  state.comments[itemId].push(entry);
+  renderCommentsUI(itemId);
+  if (useFirebase) {
+    fbPush('comments/' + itemId, entry).catch(() => {
+      lsSet('comments_' + itemId, state.comments[itemId]);
+    });
   } else {
-    if (!state.comments[itemId]) state.comments[itemId] = [];
-    state.comments[itemId].push(entry);
     lsSet('comments_' + itemId, state.comments[itemId]);
-    renderCommentsUI(itemId);
   }
 }
 
