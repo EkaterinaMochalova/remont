@@ -3,8 +3,9 @@ import os
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = 'remont-vote-secret-2024'
-DB = os.path.join(os.path.dirname(__file__), 'votes.db')
+app.secret_key = os.environ.get('SECRET_KEY', 'remont-vote-secret-2024')
+_db_dir = os.environ.get('DB_DIR', os.path.dirname(__file__))
+DB = os.path.join(_db_dir, 'votes.db')
 
 
 def get_db():
@@ -192,7 +193,8 @@ def delete_product(pid):
     return jsonify({'ok': True})
 
 
+init_db()
+seed_data()
+
 if __name__ == '__main__':
-    init_db()
-    seed_data()
     app.run(debug=True, port=5000)
