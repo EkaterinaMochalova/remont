@@ -4,7 +4,8 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'remont-vote-secret-2024')
-_db_dir = os.environ.get('DB_DIR', os.path.dirname(__file__))
+_db_dir = os.environ.get('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
+os.makedirs(_db_dir, exist_ok=True)
 DB = os.path.join(_db_dir, 'votes.db')
 
 
