@@ -24,50 +24,60 @@
 
   main { max-width: 900px; margin: 0 auto; padding: 32px 16px; display: grid; gap: 24px; }
 
-  .card {
-    background: var(--card); border-radius: 14px;
-    box-shadow: var(--shadow); padding: 24px;
-  }
+  .card { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 24px; }
   .card h2 { font-size: 1.1rem; margin-bottom: 16px; font-weight: 700; }
 
   label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
-  input, select, textarea {
-    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
-    border-radius: 8px; font-size: .95rem; outline: none; font-family: inherit;
-  }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-  textarea { resize: vertical; min-height: 60px; }
+  input, select { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: .95rem; outline: none; font-family: inherit; }
+  input:focus, select:focus { border-color: var(--accent); }
 
-  .btn {
-    background: var(--accent); color: #fff; border: none;
-    padding: 10px 22px; border-radius: 8px; font-size: .95rem;
-    cursor: pointer; font-weight: 600; transition: opacity .15s; margin-top: 14px;
-  }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-size: .95rem; cursor: pointer; font-weight: 600; transition: opacity .15s; margin-top: 14px; }
   .btn:hover { opacity: .88; }
   .btn-danger { background: var(--danger); }
   .btn-sm { padding: 6px 12px; font-size: .8rem; margin-top: 0; }
+  .btn-outline { background: var(--accent2); color: var(--accent); border: 1.5px solid var(--accent); }
+  .btn-outline:hover { background: var(--accent); color: #fff; }
 
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; }
   td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #fafafa; }
 
-  .img-preview { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: var(--accent2); }
+  .img-preview { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
   .img-placeholder { width: 48px; height: 48px; border-radius: 6px; background: var(--accent2); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
 
-  .edit-inline input { padding: 4px 8px; font-size: .85rem; }
-
   .category-header { font-size: 1rem; font-weight: 700; color: var(--accent); background: var(--accent2); padding: 8px 12px; }
-
   .hint { font-size: .78rem; color: var(--muted); margin-top: 4px; }
 
-  .tab-row { display: flex; gap: 8px; margin-bottom: 20px; }
-  .tab { padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: .9rem; font-weight: 600;
-         border: 1.5px solid var(--border); background: var(--card); color: var(--muted); }
-  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.45); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 16px; padding: 28px;
+    width: 100%; max-width: 480px; box-shadow: 0 8px 40px rgba(0,0,0,.2);
+    position: relative;
+  }
+  .modal h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none; font-size: 1.3rem;
+    cursor: pointer; color: var(--muted); line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal label { margin-top: 14px; }
+  .modal input { margin-top: 4px; }
+  .modal-img-preview {
+    width: 100%; height: 140px; object-fit: contain;
+    border-radius: 8px; background: var(--accent2);
+    margin-top: 8px; display: none;
+  }
+  .modal-img-preview.visible { display: block; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal-actions .btn { margin-top: 0; flex: 1; }
 </style>
 </head>
 <body>
@@ -95,20 +105,15 @@
         <option value="{{ cat['id'] }}">{{ cat['name'] }}</option>
         {% endfor %}
       </select>
-
       <label>Название товара</label>
       <input type="text" name="name" placeholder="Тумба с раковиной…" required>
-
       <label>Ссылка на товар</label>
       <input type="url" name="url" placeholder="https://santehnika-online.ru/...">
-
       <label>Цена</label>
       <input type="text" name="price" placeholder="12 500 ₽">
-
-      <label>Ссылка на фото (URL картинки)</label>
+      <label>URL фото</label>
       <input type="url" name="image_url" placeholder="https://…/photo.jpg">
-      <p class="hint">Открой страницу товара → ПКМ на фото → «Копировать адрес изображения»</p>
-
+      <p class="hint">ПКМ на фото товара → «Открыть изображение в новой вкладке» → скопировать адрес</p>
       <button type="submit" class="btn">Добавить</button>
     </form>
   </div>
@@ -122,122 +127,165 @@
           <th>Название</th>
           <th>Цена</th>
           <th>Ссылка</th>
-          <th style="width:80px"></th>
+          <th style="width:90px"></th>
         </tr>
       </thead>
-      <tbody id="products-table">
-        {% for cat in cats %}
-        <tr>
-          <td colspan="5" class="category-header">{{ cat['name'] }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
+      <tbody id="products-table"></tbody>
     </table>
-    <div id="products-container"></div>
   </div>
 </main>
 
+<!-- Edit modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3>Редактировать товар</h3>
+    <input type="hidden" id="edit-id">
+    <label>Название</label>
+    <input type="text" id="edit-name">
+    <label>Цена</label>
+    <input type="text" id="edit-price" placeholder="12 500 ₽">
+    <label>URL фото</label>
+    <input type="url" id="edit-img-url" placeholder="https://…/photo.jpg" oninput="previewImg(this.value)">
+    <img id="modal-preview" class="modal-img-preview" src="" alt="">
+    <p class="hint" style="margin-top:6px">ПКМ на фото товара → «Открыть изображение в новой вкладке» → скопировать адрес из строки браузера</p>
+    <div style="margin-top:12px">
+      <label style="margin-top:0">Или загрузить файл с компьютера</label>
+      <input type="file" id="edit-file" accept="image/*" onchange="uploadFromModal()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn" onclick="saveEdit()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// Load products dynamically from the page data embedded below
 const catsData = {{ cats_json|safe }};
 
-function renderProducts(products, catName, container) {
+function renderProducts(products, container) {
   products.forEach(p => {
     const row = document.createElement('tr');
     row.id = 'row-' + p.id;
     row.innerHTML = `
-      <td style="position:relative">
-        <div id="img-wrap-${p.id}" style="position:relative;display:inline-block;cursor:pointer" onclick="document.getElementById('file-${p.id}').click()" title="Нажми чтобы загрузить фото">
+      <td>
+        <div style="position:relative;display:inline-block;cursor:pointer" onclick="document.getElementById('file-inline-${p.id}').click()" title="Нажми чтобы загрузить фото">
           ${p.image_url
             ? `<img id="img-${p.id}" class="img-preview" src="${p.image_url}" onerror="this.outerHTML='<div id=\\'img-${p.id}\\' class=\\'img-placeholder\\'>🛁</div>'">`
             : `<div id="img-${p.id}" class="img-placeholder">🛁</div>`}
           <div style="position:absolute;bottom:0;right:0;background:rgba(92,107,192,.85);color:#fff;font-size:.6rem;padding:1px 3px;border-radius:3px">📷</div>
         </div>
-        <input type="file" id="file-${p.id}" accept="image/*" style="display:none" onchange="uploadImage(${p.id}, this)">
+        <input type="file" id="file-inline-${p.id}" accept="image/*" style="display:none" onchange="uploadInline(${p.id}, this)">
       </td>
+      <td>${p.name}</td>
+      <td>${p.price || '—'}</td>
+      <td>${p.url ? `<a href="${p.url}" target="_blank" style="color:#5c6bc0;font-size:.8rem">Открыть ↗</a>` : '—'}</td>
       <td>
-        <div id="name-${p.id}">${p.name}</div>
-      </td>
-      <td>
-        <div id="price-${p.id}">${p.price || '—'}</div>
-      </td>
-      <td>
-        ${p.url ? `<a href="${p.url}" target="_blank" style="color:#5c6bc0;font-size:.8rem">Открыть ↗</a>` : '—'}
-      </td>
-      <td>
-        <button class="btn btn-sm" onclick="openEdit(${p.id}, '${escHtml(p.name)}', '${escHtml(p.price||'')}', '${escHtml(p.image_url||'')}')">✏</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})" style="margin-left:4px">✕</button>
+        <button class="btn btn-sm btn-outline" style="margin-bottom:4px" onclick='openEdit(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.price||"")}, ${JSON.stringify(p.image_url||"")})'>✏ Изменить</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">✕</button>
       </td>
     `;
     container.appendChild(row);
   });
 }
 
-function escHtml(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
-
-// Edit modal
-let editId = null;
-function openEdit(id, name, price, imageUrl) {
-  editId = id;
-  const newName = prompt('Название:', name);
-  if (newName === null) return;
-  const newPrice = prompt('Цена:', price);
-  if (newPrice === null) return;
-  const newImg = prompt('URL фото:', imageUrl);
-  if (newImg === null) return;
-
-  fetch('/admin/edit_product/' + id, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name: newName, price: newPrice, image_url: newImg})
-  }).then(() => location.reload());
-}
-
-function uploadImage(id, input) {
+// Inline photo upload (click on image)
+function uploadInline(id, input) {
   const file = input.files[0];
   if (!file) return;
   const fd = new FormData();
   fd.append('image', file);
-  const wrap = document.getElementById('img-wrap-' + id);
-  wrap.style.opacity = '0.5';
   fetch('/admin/upload_image/' + id, {method: 'POST', body: fd})
     .then(r => r.json())
     .then(data => {
-      wrap.style.opacity = '1';
+      if (data.image_url) updateImg(id, data.image_url);
+    });
+}
+
+function updateImg(id, url) {
+  const el = document.getElementById('img-' + id);
+  if (!el) return;
+  const img = document.createElement('img');
+  img.id = 'img-' + id;
+  img.className = 'img-preview';
+  img.src = url;
+  el.replaceWith(img);
+}
+
+// Modal edit
+function openEdit(id, name, price, imageUrl) {
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-price').value = price;
+  document.getElementById('edit-img-url').value = imageUrl;
+  document.getElementById('edit-file').value = '';
+  previewImg(imageUrl);
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('edit-name').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function previewImg(url) {
+  const img = document.getElementById('modal-preview');
+  if (url) {
+    img.src = url;
+    img.classList.add('visible');
+  } else {
+    img.classList.remove('visible');
+  }
+}
+
+function uploadFromModal() {
+  const id = document.getElementById('edit-id').value;
+  const file = document.getElementById('edit-file').files[0];
+  if (!file || !id) return;
+  const fd = new FormData();
+  fd.append('image', file);
+  fetch('/admin/upload_image/' + id, {method: 'POST', body: fd})
+    .then(r => r.json())
+    .then(data => {
       if (data.image_url) {
-        const el = document.getElementById('img-' + id);
-        const img = document.createElement('img');
-        img.id = 'img-' + id;
-        img.className = 'img-preview';
-        img.src = data.image_url;
-        el.replaceWith(img);
+        document.getElementById('edit-img-url').value = data.image_url;
+        previewImg(data.image_url);
       }
-    })
-    .catch(() => { wrap.style.opacity = '1'; alert('Ошибка загрузки'); });
+    });
+}
+
+function saveEdit() {
+  const id = document.getElementById('edit-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  const price = document.getElementById('edit-price').value.trim();
+  const image_url = document.getElementById('edit-img-url').value.trim();
+  if (!name) return;
+  fetch('/admin/edit_product/' + id, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, price, image_url})
+  }).then(() => {
+    updateImg(id, image_url);
+    closeModal();
+    location.reload();
+  });
 }
 
 function deleteProduct(id) {
   if (!confirm('Удалить этот вариант?')) return;
   fetch('/admin/delete_product/' + id, {method: 'POST'})
-    .then(() => {
-      document.getElementById('row-' + id)?.remove();
-    });
+    .then(() => document.getElementById('row-' + id)?.remove());
 }
 
-// Load products for each category
 (async function() {
   const tbody = document.getElementById('products-table');
-  // Clear placeholder rows
-  tbody.innerHTML = '';
-
   for (const cat of catsData) {
     const headRow = document.createElement('tr');
     headRow.innerHTML = `<td colspan="5" class="category-header">${cat.name}</td>`;
     tbody.appendChild(headRow);
-
     const resp = await fetch('/api/products/' + cat.id);
     const products = await resp.json();
-    renderProducts(products, cat.name, tbody);
+    renderProducts(products, tbody);
   }
 })();
 </script>
