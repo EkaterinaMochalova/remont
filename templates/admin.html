@@ -146,10 +146,14 @@ function renderProducts(products, catName, container) {
     const row = document.createElement('tr');
     row.id = 'row-' + p.id;
     row.innerHTML = `
-      <td>
-        ${p.image_url
-          ? `<img class="img-preview" src="${p.image_url}" onerror="this.outerHTML='<div class=\\'img-placeholder\\'>🛁</div>'">`
-          : `<div class="img-placeholder">🛁</div>`}
+      <td style="position:relative">
+        <div id="img-wrap-${p.id}" style="position:relative;display:inline-block;cursor:pointer" onclick="document.getElementById('file-${p.id}').click()" title="Нажми чтобы загрузить фото">
+          ${p.image_url
+            ? `<img id="img-${p.id}" class="img-preview" src="${p.image_url}" onerror="this.outerHTML='<div id=\\'img-${p.id}\\' class=\\'img-placeholder\\'>🛁</div>'">`
+            : `<div id="img-${p.id}" class="img-placeholder">🛁</div>`}
+          <div style="position:absolute;bottom:0;right:0;background:rgba(92,107,192,.85);color:#fff;font-size:.6rem;padding:1px 3px;border-radius:3px">📷</div>
+        </div>
+        <input type="file" id="file-${p.id}" accept="image/*" style="display:none" onchange="uploadImage(${p.id}, this)">
       </td>
       <td>
         <div id="name-${p.id}">${p.name}</div>
@@ -187,6 +191,29 @@ function openEdit(id, name, price, imageUrl) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({name: newName, price: newPrice, image_url: newImg})
   }).then(() => location.reload());
+}
+
+function uploadImage(id, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('image', file);
+  const wrap = document.getElementById('img-wrap-' + id);
+  wrap.style.opacity = '0.5';
+  fetch('/admin/upload_image/' + id, {method: 'POST', body: fd})
+    .then(r => r.json())
+    .then(data => {
+      wrap.style.opacity = '1';
+      if (data.image_url) {
+        const el = document.getElementById('img-' + id);
+        const img = document.createElement('img');
+        img.id = 'img-' + id;
+        img.className = 'img-preview';
+        img.src = data.image_url;
+        el.replaceWith(img);
+      }
+    })
+    .catch(() => { wrap.style.opacity = '1'; alert('Ошибка загрузки'); });
 }
 
 function deleteProduct(id) {

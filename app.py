@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import uuid
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 
 app = Flask(__name__)
@@ -7,6 +8,10 @@ app.secret_key = os.environ.get('SECRET_KEY', 'remont-vote-secret-2024')
 _db_dir = os.environ.get('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(_db_dir, exist_ok=True)
 DB = os.path.join(_db_dir, 'votes.db')
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+ALLOWED_EXT = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
 
 
 def get_db():
@@ -192,6 +197,24 @@ def delete_product(pid):
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
+
+
+@app.route('/admin/upload_image/<int:pid>', methods=['POST'])
+def upload_image(pid):
+    f = request.files.get('image')
+    if not f:
+        return jsonify({'error': 'no file'}), 400
+    ext = f.filename.rsplit('.', 1)[-1].lower()
+    if ext not in ALLOWED_EXT:
+        return jsonify({'error': 'bad ext'}), 400
+    filename = f'{uuid.uuid4().hex}.{ext}'
+    f.save(os.path.join(UPLOAD_DIR, filename))
+    image_url = url_for('static', filename=f'uploads/{filename}')
+    conn = get_db()
+    conn.execute('UPDATE products SET image_url=? WHERE id=?', (image_url, pid))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'image_url': image_url})
 
 
 init_db()
