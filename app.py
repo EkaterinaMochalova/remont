@@ -151,7 +151,18 @@ def admin():
     return render_template('admin.html', cats=cats, cats_json=json.dumps(cats_list, ensure_ascii=False))
 
 
-@app.route('/admin/add_category', methods=['POST'])
+@app.route('/admin/rename_category/<int:cid>', methods=['POST'])
+def rename_category(cid):
+    name = request.json.get('name', '').strip()
+    if name:
+        conn = get_db()
+        conn.execute('UPDATE categories SET name=? WHERE id=?', (name, cid))
+        conn.commit()
+        conn.close()
+    return jsonify({'ok': True})
+
+
+
 def add_category():
     name = request.form.get('name', '').strip()
     if name:

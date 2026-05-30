@@ -271,6 +271,18 @@ function saveEdit() {
   });
 }
 
+function renameCategory(id) {
+  const el = document.getElementById('cat-name-' + id);
+  const current = el.textContent;
+  const newName = window.prompt('Новое название категории:', current);
+  if (!newName || newName.trim() === current) return;
+  fetch('/admin/rename_category/' + id, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: newName.trim()})
+  }).then(() => { el.textContent = newName.trim(); });
+}
+
 function deleteProduct(id) {
   if (!confirm('Удалить этот вариант?')) return;
   fetch('/admin/delete_product/' + id, {method: 'POST'})
@@ -281,7 +293,10 @@ function deleteProduct(id) {
   const tbody = document.getElementById('products-table');
   for (const cat of catsData) {
     const headRow = document.createElement('tr');
-    headRow.innerHTML = `<td colspan="5" class="category-header">${cat.name}</td>`;
+    headRow.innerHTML = `<td colspan="5" class="category-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span id="cat-name-${cat.id}">${cat.name}</span>
+      <button onclick="renameCategory(${cat.id})" style="background:none;border:none;cursor:pointer;font-size:.8rem;color:var(--accent);padding:2px 6px">✏ переименовать</button>
+    </td>`;
     tbody.appendChild(headRow);
     const resp = await fetch('/api/products/' + cat.id);
     const products = await resp.json();
