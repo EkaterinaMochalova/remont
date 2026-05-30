@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ремонт — голосование</title>
+<style>
+  :root {
+    --bg: #f5f3ef;
+    --card: #fff;
+    --accent: #5c6bc0;
+    --accent2: #e8eaf6;
+    --voted: #43a047;
+    --text: #2d2d2d;
+    --muted: #888;
+    --border: #e0ddd6;
+    --shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); }
+
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+  }
+  header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+  .voter-info { display: flex; align-items: center; gap: 10px; font-size: .9rem; color: var(--muted); }
+  .voter-info strong { color: var(--text); }
+  .voter-info a { color: var(--accent); text-decoration: none; font-size: .8rem; }
+
+  .voter-form {
+    max-width: 420px;
+    margin: 80px auto;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 40px 32px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .voter-form h2 { margin-bottom: 8px; font-size: 1.4rem; }
+  .voter-form p { color: var(--muted); margin-bottom: 24px; font-size: .95rem; }
+  .voter-form input {
+    width: 100%; padding: 12px 16px; border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 1rem; margin-bottom: 12px; outline: none;
+  }
+  .voter-form input:focus { border-color: var(--accent); }
+  .btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 12px 28px; border-radius: 10px; font-size: 1rem;
+    cursor: pointer; font-weight: 600; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .88; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px; }
+
+  .category { margin-bottom: 48px; }
+  .category-title {
+    font-size: 1.3rem; font-weight: 700; margin-bottom: 20px;
+    padding-bottom: 10px; border-bottom: 2px solid var(--border);
+    color: var(--accent);
+  }
+
+  .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+
+  .product-card {
+    background: var(--card); border-radius: 14px;
+    box-shadow: var(--shadow); overflow: hidden;
+    display: flex; flex-direction: column; transition: transform .15s;
+    border: 2px solid transparent;
+  }
+  .product-card:hover { transform: translateY(-2px); }
+  .product-card.my-voted { border-color: var(--voted); }
+
+  .product-img {
+    width: 100%; height: 200px; object-fit: contain;
+    background: #f9f9f9; border-bottom: 1px solid var(--border);
+    padding: 12px;
+  }
+  .product-img.placeholder {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; background: var(--accent2);
+  }
+
+  .product-body { padding: 14px; flex: 1; display: flex; flex-direction: column; }
+  .product-name { font-size: .95rem; font-weight: 600; line-height: 1.35; margin-bottom: 8px; }
+  .product-price { font-size: 1rem; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+  .product-link { font-size: .8rem; color: var(--muted); text-decoration: none; word-break: break-all; }
+  .product-link:hover { color: var(--accent); }
+
+  .product-footer {
+    padding: 12px 14px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .vote-count { font-size: .85rem; color: var(--muted); }
+  .vote-count span { color: var(--text); font-weight: 700; }
+
+  .vote-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--accent2); color: var(--accent);
+    border: 1.5px solid var(--accent); border-radius: 8px;
+    padding: 7px 14px; font-size: .85rem; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .vote-btn:hover { background: var(--accent); color: #fff; }
+  .vote-btn.active { background: var(--voted); border-color: var(--voted); color: #fff; }
+  .vote-btn.active:hover { opacity: .85; }
+
+  .admin-link { position: fixed; bottom: 20px; right: 20px; }
+  .admin-link a {
+    background: var(--card); color: var(--muted); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px; font-size: .8rem; text-decoration: none;
+    box-shadow: var(--shadow); display: block;
+  }
+  .admin-link a:hover { color: var(--accent); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #333; color: #fff; padding: 10px 20px; border-radius: 8px;
+    font-size: .9rem; opacity: 0; transition: all .3s; pointer-events: none; z-index: 999;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  .voters-list { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛁 Ремонт — голосование</h1>
+  {% if voter %}
+  <div class="voter-info">
+    Голосует: <strong>{{ voter }}</strong>
+    <form method="post" action="/set_voter" style="display:inline">
+      <input type="hidden" name="name" value="">
+      <button type="submit" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:.8rem">сменить</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+
+{% if not voter %}
+<div class="voter-form">
+  <h2>Добро пожаловать!</h2>
+  <p>Представься, чтобы голосовать за варианты для ремонта</p>
+  <form method="post" action="/set_voter">
+    <input type="text" name="name" placeholder="Твоё имя" required autofocus>
+    <button type="submit" class="btn">Войти</button>
+  </form>
+</div>
+{% else %}
+<main>
+  {% for item in data %}
+  <div class="category">
+    <div class="category-title">{{ item.cat['name'] }}</div>
+    <div class="products">
+      {% for p in item.products %}
+      <div class="product-card {% if p['my_vote'] %}my-voted{% endif %}" id="card-{{ p['id'] }}">
+        {% if p['image_url'] %}
+        <img class="product-img" src="{{ p['image_url'] }}" alt="{{ p['name'] }}" loading="lazy"
+             onerror="this.outerHTML='<div class=\'product-img placeholder\'>🛁</div>'">
+        {% else %}
+        <div class="product-img placeholder">🛁</div>
+        {% endif %}
+        <div class="product-body">
+          <div class="product-name">{{ p['name'] }}</div>
+          {% if p['price'] %}<div class="product-price">{{ p['price'] }}</div>{% endif %}
+          {% if p['url'] %}<a class="product-link" href="{{ p['url'] }}" target="_blank">Смотреть на сайте ↗</a>{% endif %}
+        </div>
+        <div class="product-footer">
+          <div>
+            <div class="vote-count">Голосов: <span id="count-{{ p['id'] }}">{{ p['vote_count'] }}</span></div>
+          </div>
+          <button class="vote-btn {% if p['my_vote'] %}active{% endif %}"
+                  onclick="vote({{ p['id'] }}, this)"
+                  id="btn-{{ p['id'] }}">
+            {% if p['my_vote'] %}✓ Нравится{% else %}♡ Нравится{% endif %}
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</main>
+{% endif %}
+
+<div class="admin-link"><a href="/admin">⚙ Управление</a></div>
+<div class="toast" id="toast"></div>
+
+<script>
+function vote(productId, btn) {
+  fetch('/vote', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({product_id: productId})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { showToast(data.error); return; }
+    const count = document.getElementById('count-' + productId);
+    const card = document.getElementById('card-' + productId);
+    count.textContent = data.count;
+    if (data.voted) {
+      btn.className = 'vote-btn active';
+      btn.textContent = '✓ Нравится';
+      card.classList.add('my-voted');
+    } else {
+      btn.className = 'vote-btn';
+      btn.textContent = '♡ Нравится';
+      card.classList.remove('my-voted');
+    }
+  })
+  .catch(() => showToast('Ошибка. Попробуй ещё раз.'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
