@@ -1,6 +1,12 @@
 import sqlite3
 import os
+import json
+import re
 import uuid
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 
 app = Flask(__name__)
@@ -18,6 +24,11 @@ if _db_dir != os.path.dirname(os.path.abspath(__file__)) and not os.path.exists(
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_EXT = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
+REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/124.0 Safari/537.36'
+}
 
 
 def get_db():
@@ -51,6 +62,111 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+
+def clean_text(value):
+    if not value:
+        return ''
+    return re.sub(r'\s+', ' ', str(value)).strip()
+
+
+def format_price(value):
+    if not value:
+        return ''
+    digits = re.sub(r'[^\d]', '', str(value))
+    if not digits:
+        return clean_text(value)
+    return f'{int(digits):,}'.replace(',', ' ') + ' ₽'
+
+
+def first_meta(soup, selectors):
+    for selector, attr in selectors:
+        tag = soup.select_one(selector)
+        if tag and tag.get(attr):
+            return clean_text(tag.get(attr))
+    return ''
+
+
+def find_jsonld_price_and_image(soup):
+    result = {'price': '', 'image_url': '', 'name': ''}
+    for script in soup.find_all('script', type='application/ld+json'):
+        try:
+            data = json.loads(script.string or '')
+        except (TypeError, json.JSONDecodeError):
+            continue
+        stack = data if isinstance(data, list) else [data]
+        while stack:
+            item = stack.pop(0)
+            if isinstance(item, list):
+                stack.extend(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            stack.extend(v for v in item.values() if isinstance(v, dict))
+            for value in item.values():
+                if isinstance(value, list):
+                    stack.extend(value)
+            offers = item.get('offers')
+            if not result['name'] and item.get('name'):
+                result['name'] = clean_text(item.get('name'))
+            if not result['image_url'] and item.get('image'):
+                image = item.get('image')
+                result['image_url'] = clean_text(image[0] if isinstance(image, list) else image)
+            if not result['price'] and isinstance(offers, dict) and offers.get('price'):
+                result['price'] = format_price(offers.get('price'))
+            if not result['price'] and isinstance(offers, list):
+                for offer in offers:
+                    if isinstance(offer, dict) and offer.get('price'):
+                        result['price'] = format_price(offer.get('price'))
+                        break
+    return result
+
+
+def fetch_product_info(url):
+    if not url:
+        return {'name': '', 'price': '', 'image_url': ''}
+
+    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=12)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    jsonld = find_jsonld_price_and_image(soup)
+
+    name = (
+        first_meta(soup, [
+            ('meta[property="og:title"]', 'content'),
+            ('meta[name="twitter:title"]', 'content'),
+        ])
+        or jsonld['name']
+        or clean_text(soup.title.string if soup.title else '')
+    )
+    price = (
+        first_meta(soup, [
+            ('meta[itemprop="price"]', 'content'),
+            ('meta[property="product:price:amount"]', 'content'),
+            ('meta[property="og:price:amount"]', 'content'),
+        ])
+        or jsonld['price']
+    )
+    image_url = (
+        first_meta(soup, [
+            ('meta[property="og:image"]', 'content'),
+            ('meta[name="twitter:image"]', 'content'),
+            ('meta[itemprop="image"]', 'content'),
+        ])
+        or jsonld['image_url']
+    )
+
+    if price:
+        price = format_price(price)
+    else:
+        match = re.search(r'(\d[\d\s]{2,})\s*(?:₽|руб)', soup.get_text(' ', strip=True), re.IGNORECASE)
+        price = format_price(match.group(1)) if match else ''
+
+    return {
+        'name': name,
+        'price': price,
+        'image_url': urljoin(url, image_url) if image_url else '',
+    }
 
 
 def seed_data():
@@ -149,7 +265,6 @@ def api_products(cat_id):
 
 @app.route('/admin')
 def admin():
-    import json
     conn = get_db()
     cats = conn.execute('SELECT * FROM categories ORDER BY id').fetchall()
     cats_list = [dict(c) for c in cats]
@@ -168,7 +283,7 @@ def rename_category(cid):
     return jsonify({'ok': True})
 
 
-
+@app.route('/admin/add_category', methods=['POST'])
 def add_category():
     name = request.form.get('name', '').strip()
     if name:
@@ -186,21 +301,48 @@ def add_product():
     url = request.form.get('url', '').strip()
     price = request.form.get('price', '').strip()
     image_url = request.form.get('image_url', '').strip()
+    if url and (not price or not image_url or not name):
+        try:
+            info = fetch_product_info(url)
+            name = name or info['name']
+            price = price or info['price']
+            image_url = image_url or info['image_url']
+        except requests.RequestException:
+            pass
     if name and cat_id:
         conn = get_db()
-        conn.execute('INSERT INTO products (category_id, name, url, price, image_url) VALUES (?,?,?,?,?)',
-                     (cat_id, name, url, price, image_url))
+        existing = conn.execute('SELECT id FROM products WHERE url=? AND url<>""', (url,)).fetchone() if url else None
+        if existing:
+            conn.execute('''
+                UPDATE products
+                SET category_id=?, name=?, url=?, price=?, image_url=?
+                WHERE id=?
+            ''', (cat_id, name, url, price, image_url, existing['id']))
+        else:
+            conn.execute('INSERT INTO products (category_id, name, url, price, image_url) VALUES (?,?,?,?,?)',
+                         (cat_id, name, url, price, image_url))
         conn.commit()
         conn.close()
     return redirect(url_for('admin'))
+
+
+@app.route('/admin/fetch_product_info', methods=['POST'])
+def fetch_product_info_route():
+    url = (request.json or {}).get('url', '').strip()
+    if not url:
+        return jsonify({'error': 'Добавь ссылку на товар'}), 400
+    try:
+        return jsonify({'ok': True, **fetch_product_info(url)})
+    except requests.RequestException:
+        return jsonify({'error': 'Не получилось получить данные по ссылке'}), 502
 
 
 @app.route('/admin/edit_product/<int:pid>', methods=['POST'])
 def edit_product(pid):
     data = request.json
     conn = get_db()
-    conn.execute('UPDATE products SET name=?, price=?, image_url=? WHERE id=?',
-                 (data['name'], data['price'], data['image_url'], pid))
+    conn.execute('UPDATE products SET name=?, url=?, price=?, image_url=? WHERE id=?',
+                 (data['name'], data.get('url', ''), data['price'], data['image_url'], pid))
     conn.commit()
     conn.close()
     return jsonify({'ok': True})

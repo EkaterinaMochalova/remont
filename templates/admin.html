@@ -37,6 +37,8 @@
   .btn-sm { padding: 6px 12px; font-size: .8rem; margin-top: 0; }
   .btn-outline { background: var(--accent2); color: var(--accent); border: 1.5px solid var(--accent); }
   .btn-outline:hover { background: var(--accent); color: #fff; }
+  .inline-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .inline-actions .btn { margin-top: 10px; }
 
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; }
@@ -105,15 +107,19 @@
         <option value="{{ cat['id'] }}">{{ cat['name'] }}</option>
         {% endfor %}
       </select>
-      <label>Название товара</label>
-      <input type="text" name="name" placeholder="Тумба с раковиной…" required>
       <label>Ссылка на товар</label>
-      <input type="url" name="url" placeholder="https://santehnika-online.ru/...">
+      <input type="url" name="url" id="add-url" placeholder="https://santehnika-online.ru/...">
+      <div class="inline-actions">
+        <button type="button" class="btn btn-outline" onclick="fillProductFromUrl('add')">Подтянуть фото и цену</button>
+        <span class="hint" id="add-fetch-status"></span>
+      </div>
+      <label>Название товара</label>
+      <input type="text" name="name" id="add-name" placeholder="Можно оставить пустым, если подтягиваем по ссылке">
       <label>Цена</label>
-      <input type="text" name="price" placeholder="12 500 ₽">
+      <input type="text" name="price" id="add-price" placeholder="12 500 ₽">
       <label>URL фото</label>
-      <input type="url" name="image_url" placeholder="https://…/photo.jpg">
-      <p class="hint">ПКМ на фото товара → «Открыть изображение в новой вкладке» → скопировать адрес</p>
+      <input type="url" name="image_url" id="add-img-url" placeholder="https://…/photo.jpg">
+      <p class="hint">Можно вставить только ссылку на товар и нажать “Подтянуть фото и цену”; поля ниже заполнятся автоматически, если сайт отдаёт эти данные.</p>
       <button type="submit" class="btn">Добавить</button>
     </form>
   </div>
@@ -141,6 +147,12 @@
     <button class="modal-close" onclick="closeModal()">✕</button>
     <h3>Редактировать товар</h3>
     <input type="hidden" id="edit-id">
+    <label>Ссылка на товар</label>
+    <input type="url" id="edit-url" placeholder="https://santehnika-online.ru/...">
+    <div class="inline-actions">
+      <button class="btn btn-outline" onclick="fillProductFromUrl('edit')">Обновить фото и цену</button>
+      <span class="hint" id="edit-fetch-status"></span>
+    </div>
     <label>Название</label>
     <input type="text" id="edit-name">
     <label>Цена</label>
@@ -181,7 +193,7 @@ function renderProducts(products, container) {
       <td>${p.price || '—'}</td>
       <td>${p.url ? `<a href="${p.url}" target="_blank" style="color:#5c6bc0;font-size:.8rem">Открыть ↗</a>` : '—'}</td>
       <td>
-        <button class="btn btn-sm btn-outline" style="margin-bottom:4px" onclick='openEdit(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.price||"")}, ${JSON.stringify(p.image_url||"")})'>✏ Изменить</button>
+        <button class="btn btn-sm btn-outline" style="margin-bottom:4px" onclick='openEdit(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.url||"")}, ${JSON.stringify(p.price||"")}, ${JSON.stringify(p.image_url||"")})'>✏ Изменить</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">✕</button>
       </td>
     `;
@@ -213,12 +225,14 @@ function updateImg(id, url) {
 }
 
 // Modal edit
-function openEdit(id, name, price, imageUrl) {
+function openEdit(id, name, url, price, imageUrl) {
   document.getElementById('edit-id').value = id;
+  document.getElementById('edit-url').value = url;
   document.getElementById('edit-name').value = name;
   document.getElementById('edit-price').value = price;
   document.getElementById('edit-img-url').value = imageUrl;
   document.getElementById('edit-file').value = '';
+  document.getElementById('edit-fetch-status').textContent = '';
   previewImg(imageUrl);
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('edit-name').focus();
@@ -256,6 +270,7 @@ function uploadFromModal() {
 
 function saveEdit() {
   const id = document.getElementById('edit-id').value;
+  const url = document.getElementById('edit-url').value.trim();
   const name = document.getElementById('edit-name').value.trim();
   const price = document.getElementById('edit-price').value.trim();
   const image_url = document.getElementById('edit-img-url').value.trim();
@@ -263,12 +278,43 @@ function saveEdit() {
   fetch('/admin/edit_product/' + id, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name, price, image_url})
+    body: JSON.stringify({name, url, price, image_url})
   }).then(() => {
     updateImg(id, image_url);
     closeModal();
     location.reload();
   });
+}
+
+function fillProductFromUrl(mode) {
+  const url = document.getElementById(mode + '-url').value.trim();
+  const status = document.getElementById(mode + '-fetch-status');
+  if (!url) {
+    status.textContent = 'Сначала вставь ссылку';
+    return;
+  }
+  status.textContent = 'Загружаю...';
+  fetch('/admin/fetch_product_info', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url})
+  })
+    .then(r => r.json().then(data => ({ok: r.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok || data.error) {
+        status.textContent = data.error || 'Не получилось загрузить';
+        return;
+      }
+      const name = document.getElementById(mode + '-name');
+      const price = document.getElementById(mode + '-price');
+      const img = document.getElementById(mode + '-img-url');
+      if (data.name && !name.value.trim()) name.value = data.name;
+      if (data.price) price.value = data.price;
+      if (data.image_url) img.value = data.image_url;
+      if (mode === 'edit') previewImg(img.value);
+      status.textContent = 'Готово';
+    })
+    .catch(() => { status.textContent = 'Не получилось загрузить'; });
 }
 
 function renameCategory(id) {
