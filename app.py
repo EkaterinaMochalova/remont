@@ -11,6 +11,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'remont-vote-secret-2024')
+_db_initialized = False
 _db_dir = os.environ.get('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(_db_dir, exist_ok=True)
 DB = os.path.join(_db_dir, 'votes.db')
@@ -32,7 +33,7 @@ REQUEST_HEADERS = {
 
 
 def get_db():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=2)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -68,6 +69,20 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+
+@app.before_request
+def ensure_db_ready():
+    global _db_initialized
+    if _db_initialized:
+        return None
+    try:
+        init_db()
+        seed_data()
+    except sqlite3.Error:
+        return jsonify({'error': 'База временно недоступна, попробуй обновить страницу через несколько секунд'}), 503
+    _db_initialized = True
+    return None
 
 
 def clean_text(value):
@@ -493,9 +508,6 @@ def upload_image(pid):
     conn.close()
     return jsonify({'ok': True, 'image_url': image_url})
 
-
-init_db()
-seed_data()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
