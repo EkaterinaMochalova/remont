@@ -126,9 +126,28 @@ def fetch_product_info(url):
     if not url:
         return {'name': '', 'price': '', 'image_url': ''}
 
-    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=12)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, 'html.parser')
+    try:
+        resp = requests.get(url, headers=REQUEST_HEADERS, timeout=12)
+        resp.raise_for_status()
+    except requests.RequestException:
+        bundled = fetch_bundled_product_info(url)
+        if any(bundled.values()):
+            return bundled
+        raise
+
+    if 'Forbidden' in resp.text[:1000]:
+        bundled = fetch_bundled_product_info(url)
+        if any(bundled.values()):
+            return bundled
+
+    parsed = parse_product_html(url, resp.text)
+    if any(parsed.values()):
+        return parsed
+    return fetch_bundled_product_info(url)
+
+
+def parse_product_html(url, html):
+    soup = BeautifulSoup(html, 'html.parser')
     jsonld = find_jsonld_price_and_image(soup)
 
     name = (
@@ -167,6 +186,78 @@ def fetch_product_info(url):
         'price': price,
         'image_url': urljoin(url, image_url) if image_url else '',
     }
+
+
+def fetch_bundled_product_info(url):
+    if not url or not os.path.exists(_bundled_db):
+        return {'name': '', 'price': '', 'image_url': ''}
+    conn = sqlite3.connect(_bundled_db)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        'SELECT name, price, image_url FROM products WHERE url=?',
+        (url,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {'name': '', 'price': '', 'image_url': ''}
+    return {
+        'name': row['name'] or '',
+        'price': row['price'] or '',
+        'image_url': row['image_url'] or '',
+    }
+
+
+def sync_bundled_products():
+    if not os.path.exists(_bundled_db) or os.path.abspath(_bundled_db) == os.path.abspath(DB):
+        return
+
+    source = sqlite3.connect(_bundled_db)
+    source.row_factory = sqlite3.Row
+    target = get_db()
+
+    rows = source.execute('''
+        SELECT c.name AS category_name, p.name, p.url, p.price, p.image_url
+        FROM products p
+        JOIN categories c ON c.id = p.category_id
+        WHERE COALESCE(p.url, '') <> ''
+        ORDER BY p.id
+    ''').fetchall()
+
+    for row in rows:
+        category = target.execute(
+            'SELECT id FROM categories WHERE name=?',
+            (row['category_name'],)
+        ).fetchone()
+        if category:
+            category_id = category['id']
+        else:
+            category_id = target.execute(
+                'INSERT INTO categories (name) VALUES (?)',
+                (row['category_name'],)
+            ).lastrowid
+
+        existing = target.execute(
+            'SELECT id FROM products WHERE url=?',
+            (row['url'],)
+        ).fetchone()
+        if existing:
+            target.execute('''
+                UPDATE products
+                SET category_id=?,
+                    name=?,
+                    price=COALESCE(NULLIF(?, ''), price),
+                    image_url=COALESCE(NULLIF(?, ''), image_url)
+                WHERE id=?
+            ''', (category_id, row['name'], row['price'], row['image_url'], existing['id']))
+        else:
+            target.execute('''
+                INSERT INTO products (category_id, name, url, price, image_url)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (category_id, row['name'], row['url'], row['price'], row['image_url']))
+
+    target.commit()
+    target.close()
+    source.close()
 
 
 def seed_data():
@@ -332,9 +423,12 @@ def fetch_product_info_route():
     if not url:
         return jsonify({'error': 'Добавь ссылку на товар'}), 400
     try:
-        return jsonify({'ok': True, **fetch_product_info(url)})
+        info = fetch_product_info(url)
     except requests.RequestException:
         return jsonify({'error': 'Не получилось получить данные по ссылке'}), 502
+    if not any(info.values()):
+        return jsonify({'error': 'По этой ссылке не нашлись фото или цена'}), 404
+    return jsonify({'ok': True, **info})
 
 
 @app.route('/admin/edit_product/<int:pid>', methods=['POST'])
@@ -378,6 +472,7 @@ def upload_image(pid):
 
 init_db()
 seed_data()
+sync_bundled_products()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
