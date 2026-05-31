@@ -9,6 +9,12 @@ _db_dir = os.environ.get('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(_db_dir, exist_ok=True)
 DB = os.path.join(_db_dir, 'votes.db')
 
+# If using external volume and DB is empty/missing, seed from bundled DB in repo
+_bundled_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'votes.db')
+if _db_dir != os.path.dirname(os.path.abspath(__file__)) and not os.path.exists(DB) and os.path.exists(_bundled_db):
+    import shutil
+    shutil.copy2(_bundled_db, DB)
+
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_EXT = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
