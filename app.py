@@ -37,6 +37,12 @@ def get_db():
     return conn
 
 
+def get_bundled_db():
+    conn = sqlite3.connect(_bundled_db)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def init_db():
     conn = get_db()
     conn.executescript('''
@@ -191,8 +197,7 @@ def parse_product_html(url, html):
 def fetch_bundled_product_info(url):
     if not url or not os.path.exists(_bundled_db):
         return {'name': '', 'price': '', 'image_url': ''}
-    conn = sqlite3.connect(_bundled_db)
-    conn.row_factory = sqlite3.Row
+    conn = get_bundled_db()
     row = conn.execute(
         'SELECT name, price, image_url FROM products WHERE url=?',
         (url,)
@@ -209,55 +214,65 @@ def fetch_bundled_product_info(url):
 
 def sync_bundled_products():
     if not os.path.exists(_bundled_db) or os.path.abspath(_bundled_db) == os.path.abspath(DB):
-        return
+        return {'categories': 0, 'inserted': 0, 'updated': 0}
 
-    source = sqlite3.connect(_bundled_db)
-    source.row_factory = sqlite3.Row
+    source = get_bundled_db()
     target = get_db()
+    target.execute('PRAGMA busy_timeout = 1000')
+    stats = {'categories': 0, 'inserted': 0, 'updated': 0}
 
-    rows = source.execute('''
-        SELECT c.name AS category_name, p.name, p.url, p.price, p.image_url
-        FROM products p
-        JOIN categories c ON c.id = p.category_id
-        WHERE COALESCE(p.url, '') <> ''
-        ORDER BY p.id
-    ''').fetchall()
+    try:
+        rows = source.execute('''
+            SELECT c.name AS category_name, p.name, p.url, p.price, p.image_url
+            FROM products p
+            JOIN categories c ON c.id = p.category_id
+            WHERE COALESCE(p.url, '') <> ''
+            ORDER BY p.id
+        ''').fetchall()
 
-    for row in rows:
-        category = target.execute(
-            'SELECT id FROM categories WHERE name=?',
-            (row['category_name'],)
-        ).fetchone()
-        if category:
-            category_id = category['id']
-        else:
-            category_id = target.execute(
-                'INSERT INTO categories (name) VALUES (?)',
+        for row in rows:
+            category = target.execute(
+                'SELECT id FROM categories WHERE name=?',
                 (row['category_name'],)
-            ).lastrowid
+            ).fetchone()
+            if category:
+                category_id = category['id']
+            else:
+                category_id = target.execute(
+                    'INSERT INTO categories (name) VALUES (?)',
+                    (row['category_name'],)
+                ).lastrowid
+                stats['categories'] += 1
 
-        existing = target.execute(
-            'SELECT id FROM products WHERE url=?',
-            (row['url'],)
-        ).fetchone()
-        if existing:
-            target.execute('''
-                UPDATE products
-                SET category_id=?,
-                    name=?,
-                    price=COALESCE(NULLIF(?, ''), price),
-                    image_url=COALESCE(NULLIF(?, ''), image_url)
-                WHERE id=?
-            ''', (category_id, row['name'], row['price'], row['image_url'], existing['id']))
-        else:
-            target.execute('''
-                INSERT INTO products (category_id, name, url, price, image_url)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (category_id, row['name'], row['url'], row['price'], row['image_url']))
+            existing = target.execute(
+                'SELECT id FROM products WHERE url=?',
+                (row['url'],)
+            ).fetchone()
+            if existing:
+                target.execute('''
+                    UPDATE products
+                    SET category_id=?,
+                        name=?,
+                        price=COALESCE(NULLIF(?, ''), price),
+                        image_url=COALESCE(NULLIF(?, ''), image_url)
+                    WHERE id=?
+                ''', (category_id, row['name'], row['price'], row['image_url'], existing['id']))
+                stats['updated'] += 1
+            else:
+                target.execute('''
+                    INSERT INTO products (category_id, name, url, price, image_url)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (category_id, row['name'], row['url'], row['price'], row['image_url']))
+                stats['inserted'] += 1
 
-    target.commit()
-    target.close()
-    source.close()
+        target.commit()
+        return stats
+    except Exception:
+        target.rollback()
+        raise
+    finally:
+        target.close()
+        source.close()
 
 
 def seed_data():
@@ -431,6 +446,15 @@ def fetch_product_info_route():
     return jsonify({'ok': True, **info})
 
 
+@app.route('/admin/sync_bundled_products', methods=['POST'])
+def sync_bundled_products_route():
+    try:
+        stats = sync_bundled_products()
+    except sqlite3.Error as exc:
+        return jsonify({'error': f'Не получилось обновить базу: {exc}'}), 500
+    return jsonify({'ok': True, **stats})
+
+
 @app.route('/admin/edit_product/<int:pid>', methods=['POST'])
 def edit_product(pid):
     data = request.json
@@ -472,7 +496,6 @@ def upload_image(pid):
 
 init_db()
 seed_data()
-sync_bundled_products()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
